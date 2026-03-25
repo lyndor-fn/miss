@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Caveat:wght@400..700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Playfair Display", serif;
+  --font-sans: "DM Sans", sans-serif;
+  --font-hand: "Caveat", cursive;
+  
+  --color-medical-blue: #004282;
+  --color-medical-green: #00A651;
+  --color-medical-bg: #FAFAF8;
+  --color-medical-cyan: #E0F7FA;
+  --color-medical-slate: #1A1A1A;
+}
+
+@layer base {
+  body {
+    @apply bg-medical-bg text-medical-slate font-sans;
+  }
+  
+  h1, h2, h3, h4, .font-serif {
+    @apply font-serif;
+  }
+}
+
+.dotted-input {
+  @apply border-b border-dotted border-medical-slate/40 bg-transparent outline-none focus:border-medical-blue transition-colors;
+}
+
+.signature-canvas {
+  touch-action: none;
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
