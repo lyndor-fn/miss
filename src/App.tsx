@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Receipt, Pill, FileText, Plus, Trash2, Download, RotateCcw } from 'lucide-react';
 import jsPDF from 'jspdf';
@@ -23,22 +23,25 @@ const INITIAL_PATIENT: PatientInfo = {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'invoice' | 'prescription' | 'bulletin'>('invoice');
-  const [doctorInfo, setDoctorInfo] = useState<DoctorInfo>(DEFAULT_DOCTOR);
   const [patientInfo, setPatientInfo] = useState<PatientInfo>(INITIAL_PATIENT);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [bulletinItems, setBulletinItems] = useState<string[]>([]);
   const [diagnosis, setDiagnosis] = useState('');
   const [signature, setSignature] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const pdfContentRef = useRef<HTMLDivElement>(null);
+  const doctorInfo = DEFAULT_DOCTOR;
 
-  useEffect(() => {
-    const saved = localStorage.getItem('doctor_info');
-    if (saved) setDoctorInfo(JSON.parse(saved));
-  }, []);
+  const sanitizeFileSegment = (value: string, fallback: string) => {
+    const cleaned = value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
+      .trim()
+      .replace(/\s+/g, '_');
 
-  const updateDoctorInfo = (info: DoctorInfo) => {
-    setDoctorInfo(info);
-    localStorage.setItem('doctor_info', JSON.stringify(info));
+    return cleaned || fallback;
   };
 
   const addInvoiceItem = () => {
@@ -117,32 +120,82 @@ export default function App() {
   };
 
   const generatePDF = async () => {
-    const element = document.getElementById('pdf-content');
-    if (!element) return;
+    const element = pdfContentRef.current;
+    if (!element || isGeneratingPdf) return;
 
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#FFFFFF'
-    });
-    
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    const fileName = `${activeTab}_${patientInfo.name || 'patient'}_${patientInfo.date}.pdf`;
-    pdf.save(fileName);
+    let captureRoot: HTMLDivElement | null = null;
+
+    try {
+      setIsGeneratingPdf(true);
+
+      if ('fonts' in document) {
+        await document.fonts.ready;
+      }
+
+      captureRoot = document.createElement('div');
+      captureRoot.style.position = 'fixed';
+      captureRoot.style.top = '0';
+      captureRoot.style.left = '-10000px';
+      captureRoot.style.pointerEvents = 'none';
+      captureRoot.style.background = '#FFFFFF';
+      captureRoot.style.zIndex = '-1';
+
+      const clonedElement = element.cloneNode(true) as HTMLDivElement;
+      captureRoot.appendChild(clonedElement);
+      document.body.appendChild(captureRoot);
+
+      const canvas = await html2canvas(clonedElement, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#FFFFFF',
+        width: clonedElement.scrollWidth,
+        height: clonedElement.scrollHeight,
+        windowWidth: clonedElement.scrollWidth,
+        windowHeight: clonedElement.scrollHeight,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+      let remainingHeight = pdfHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      remainingHeight -= pageHeight;
+
+      while (remainingHeight > 0) {
+        position = remainingHeight - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        remainingHeight -= pageHeight;
+      }
+
+      const fileName = [
+        activeTab,
+        sanitizeFileSegment(patientInfo.name, 'patient'),
+        sanitizeFileSegment(patientInfo.date || INITIAL_PATIENT.date, 'date'),
+      ].join('_');
+
+      await pdf.save(`${fileName}.pdf`, { returnPromise: true });
+    } catch (error) {
+      console.error('PDF generation failed:', error);
+      window.alert("Le telechargement du PDF a echoue. Reessayez apres avoir rempli le document.");
+    } finally {
+      captureRoot?.remove();
+      setIsGeneratingPdf(false);
+    }
   };
 
   return (
     <div className="min-h-screen pb-24 max-w-md mx-auto relative overflow-x-hidden">
       {/* Hidden container for PDF generation */}
       <div className="absolute left-[-9999px] top-0">
-        <div id="pdf-content" className="w-[210mm] min-h-[297mm] p-12 bg-white font-sans text-medical-slate relative overflow-hidden">
+        <div ref={pdfContentRef} id="pdf-content" className="w-[210mm] min-h-[297mm] p-12 bg-white font-sans text-medical-slate relative overflow-hidden">
           {/* Header */}
           <div className="flex justify-between items-start mb-12 relative">
             <div className="flex-1 border-r-2 border-medical-blue pr-8">
@@ -286,7 +339,7 @@ export default function App() {
 
       {/* Main UI */}
       <div className="p-4 pt-8">
-        <DoctorHeader info={doctorInfo} onUpdate={updateDoctorInfo} />
+        <DoctorHeader info={doctorInfo} />
 
         <AnimatePresence mode="wait">
           <motion.div
@@ -439,10 +492,12 @@ export default function App() {
 
             <div className="grid grid-cols-2 gap-3 pt-6">
               <button
+                type="button"
                 onClick={generatePDF}
-                className="flex items-center justify-center gap-2 bg-medical-blue text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-medical-blue/20 active:scale-95 transition-transform"
+                disabled={isGeneratingPdf}
+                className="flex items-center justify-center gap-2 bg-medical-blue text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-medical-blue/20 active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
               >
-                <Download size={18} /> PDF
+                <Download size={18} /> {isGeneratingPdf ? 'Generation...' : 'PDF'}
               </button>
               <button
                 onClick={resetAll}
