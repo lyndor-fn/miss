@@ -5,10 +5,10 @@ export interface DoctorInfo {
 }
 
 export interface PatientInfo {
-  name: string;
-  age: string;
+  lastName: string;
+  firstName: string;
   date: string;
-  weight?: string;
+  weight: string;
 }
 
 export interface InvoiceItem {

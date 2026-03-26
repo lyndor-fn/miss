@@ -3,9 +3,19 @@ import { DoctorInfo } from '../types';
 
 interface DoctorHeaderProps {
   info: DoctorInfo;
+  date: string;
 }
 
-export const DoctorHeader: React.FC<DoctorHeaderProps> = ({ info }) => {
+const formatDate = (value: string) => {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) {
+    return value;
+  }
+
+  return new Date(year, month - 1, day).toLocaleDateString('fr-FR');
+};
+
+export const DoctorHeader: React.FC<DoctorHeaderProps> = ({ info, date }) => {
   return (
     <div className="relative bg-white p-4 rounded-xl shadow-sm border border-medical-blue/10 mb-4">
       <div className="flex justify-between items-start">
@@ -24,7 +34,7 @@ export const DoctorHeader: React.FC<DoctorHeaderProps> = ({ info }) => {
           <div className="flex items-center gap-2">
             <span className="text-medical-blue font-bold text-xs uppercase">Date :</span>
             <span className="text-medical-slate font-hand text-lg border-b border-dotted border-medical-slate/40 flex-1">
-              {new Date().toLocaleDateString('fr-FR')}
+              {formatDate(date)}
             </span>
           </div>
         </div>

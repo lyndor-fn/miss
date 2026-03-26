@@ -15,15 +15,16 @@ const DEFAULT_DOCTOR: DoctorInfo = {
   phone: '+221 774474590',
 };
 
-const INITIAL_PATIENT: PatientInfo = {
-  name: '',
-  age: '',
+const createInitialPatient = (): PatientInfo => ({
+  lastName: '',
+  firstName: '',
   date: new Date().toISOString().split('T')[0],
-};
+  weight: '',
+});
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'invoice' | 'prescription' | 'bulletin'>('invoice');
-  const [patientInfo, setPatientInfo] = useState<PatientInfo>(INITIAL_PATIENT);
+  const [patientInfo, setPatientInfo] = useState<PatientInfo>(createInitialPatient);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [bulletinItems, setBulletinItems] = useState<string[]>([]);
@@ -32,6 +33,23 @@ export default function App() {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const pdfContentRef = useRef<HTMLDivElement>(null);
   const doctorInfo = DEFAULT_DOCTOR;
+
+  const createId = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+
+    return Math.random().toString(36).slice(2, 11);
+  };
+
+  const formatPatientDate = (value: string) => {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) {
+      return value;
+    }
+
+    return new Date(year, month - 1, day).toLocaleDateString('fr-FR');
+  };
 
   const sanitizeFileSegment = (value: string, fallback: string) => {
     const cleaned = value
@@ -46,37 +64,37 @@ export default function App() {
 
   const addInvoiceItem = () => {
     const newItem: InvoiceItem = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: createId(),
       description: '',
       quantity: 1,
       price: 0,
     };
-    setInvoiceItems([...invoiceItems, newItem]);
+    setInvoiceItems((items) => [...items, newItem]);
   };
 
   const updateInvoiceItem = (id: string, field: keyof InvoiceItem, value: any) => {
-    setInvoiceItems(items => items.map(item => 
+    setInvoiceItems((items) => items.map((item) =>
       item.id === id ? { ...item, [field]: value } : item
     ));
   };
 
   const removeInvoiceItem = (id: string) => {
-    setInvoiceItems(items => items.filter(item => item.id !== id));
+    setInvoiceItems((items) => items.filter((item) => item.id !== id));
   };
 
   const addMedication = () => {
     const newMed: Medication = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: createId(),
       name: '',
       dosage: '',
       duration: '',
       posology: { morning: false, noon: false, evening: false, night: false },
     };
-    setMedications([...medications, newMed]);
+    setMedications((items) => [...items, newMed]);
   };
 
   const updateMedication = (id: string, field: string, value: any) => {
-    setMedications(meds => meds.map(med => {
+    setMedications((meds) => meds.map((med) => {
       if (med.id === id) {
         if (field.includes('.')) {
           const [parent, child] = field.split('.');
@@ -89,11 +107,11 @@ export default function App() {
   };
 
   const removeMedication = (id: string) => {
-    setMedications(meds => meds.filter(med => med.id !== id));
+    setMedications((meds) => meds.filter((med) => med.id !== id));
   };
 
   const addBulletinItem = () => {
-    setBulletinItems([...bulletinItems, '']);
+    setBulletinItems((items) => [...items, '']);
   };
 
   const updateBulletinItem = (index: number, value: string) => {
@@ -107,7 +125,7 @@ export default function App() {
   };
 
   const resetAll = () => {
-    setPatientInfo(INITIAL_PATIENT);
+    setPatientInfo(createInitialPatient());
     setInvoiceItems([]);
     setMedications([]);
     setBulletinItems([]);
@@ -139,16 +157,27 @@ export default function App() {
       captureRoot.style.pointerEvents = 'none';
       captureRoot.style.background = '#FFFFFF';
       captureRoot.style.zIndex = '-1';
+      captureRoot.style.opacity = '0';
+      captureRoot.style.overflow = 'hidden';
+      captureRoot.style.inset = '0';
 
       const clonedElement = element.cloneNode(true) as HTMLDivElement;
+      clonedElement.style.position = 'relative';
+      clonedElement.style.left = '0';
+      clonedElement.style.top = '0';
+      clonedElement.style.margin = '0 auto';
       captureRoot.appendChild(clonedElement);
       document.body.appendChild(captureRoot);
+
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
       const canvas = await html2canvas(clonedElement, {
         scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: '#FFFFFF',
+        scrollX: 0,
+        scrollY: 0,
         width: clonedElement.scrollWidth,
         height: clonedElement.scrollHeight,
         windowWidth: clonedElement.scrollWidth,
@@ -177,11 +206,19 @@ export default function App() {
 
       const fileName = [
         activeTab,
-        sanitizeFileSegment(patientInfo.name, 'patient'),
-        sanitizeFileSegment(patientInfo.date || INITIAL_PATIENT.date, 'date'),
+        sanitizeFileSegment(`${patientInfo.lastName}_${patientInfo.firstName}`, 'patient'),
+        sanitizeFileSegment(patientInfo.date || createInitialPatient().date, 'date'),
       ].join('_');
 
-      await pdf.save(`${fileName}.pdf`, { returnPromise: true });
+      const pdfBlob = pdf.output('blob');
+      const objectUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = `${fileName}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (error) {
       console.error('PDF generation failed:', error);
       window.alert("Le telechargement du PDF a echoue. Reessayez apres avoir rempli le document.");
@@ -207,13 +244,13 @@ export default function App() {
               <div className="flex items-center gap-4 mb-6">
                 <span className="text-medical-blue font-bold text-xl uppercase whitespace-nowrap">DATE :</span>
                 <span className="text-medical-slate font-hand text-3xl border-b-2 border-dotted border-medical-slate/40 flex-1 pb-1">
-                  {new Date(patientInfo.date).toLocaleDateString('fr-FR')}
+                  {formatPatientDate(patientInfo.date)}
                 </span>
               </div>
               <div className="flex items-center gap-4">
                 <span className="text-medical-blue font-bold text-xl uppercase whitespace-nowrap">NOM :</span>
                 <span className="text-medical-slate font-hand text-3xl border-b-2 border-dotted border-medical-slate/40 flex-1 pb-1">
-                  {patientInfo.name}
+                  {patientInfo.lastName}
                 </span>
               </div>
             </div>
@@ -222,7 +259,7 @@ export default function App() {
           <div className="flex items-center gap-4 mb-12">
             <span className="text-medical-blue font-bold text-xl uppercase whitespace-nowrap">PRENOM :</span>
             <span className="text-medical-slate font-hand text-3xl border-b-2 border-dotted border-medical-slate/40 flex-1 pb-1">
-              {patientInfo.age}
+              {patientInfo.firstName}
             </span>
           </div>
 
@@ -273,6 +310,12 @@ export default function App() {
               </div>
             ) : activeTab === 'prescription' ? (
               <div className="space-y-12 text-center">
+                {patientInfo.weight && (
+                  <div className="text-right">
+                    <span className="text-2xl font-bold uppercase text-medical-blue">Poids :</span>{' '}
+                    <span className="text-3xl font-hand">{patientInfo.weight} kg</span>
+                  </div>
+                )}
                 {medications.map(med => (
                   <div key={med.id} className="space-y-2">
                     <div className="flex justify-center items-baseline gap-8">
@@ -295,7 +338,7 @@ export default function App() {
                 ))}
                 {diagnosis && (
                   <div className="mt-16 pt-8 border-t-2 border-medical-blue/10">
-                    <p className="text-3xl font-hand"><span className="font-bold font-sans text-2xl uppercase">Diagnostique:</span> {diagnosis}</p>
+                    <p className="text-3xl font-hand"><span className="font-bold font-sans text-2xl uppercase">Diagnostic:</span> {diagnosis}</p>
                   </div>
                 )}
               </div>
@@ -312,8 +355,8 @@ export default function App() {
             
             <div className="text-center space-y-8">
               <div className="border-4 border-medical-blue p-4 rounded-lg transform -rotate-2">
-                <p className="text-xl font-bold text-medical-blue">{doctorInfo.name} MBODJI</p>
-                <p className="text-lg font-bold text-medical-blue">Médecin Santé au Travail</p>
+                <p className="text-xl font-bold text-medical-blue">{doctorInfo.name}</p>
+                <p className="text-lg font-bold text-medical-blue">{doctorInfo.specialty}</p>
               </div>
               
               <div className="relative pt-12">
@@ -339,7 +382,7 @@ export default function App() {
 
       {/* Main UI */}
       <div className="p-4 pt-8">
-        <DoctorHeader info={doctorInfo} />
+        <DoctorHeader info={doctorInfo} date={patientInfo.date} />
 
         <AnimatePresence mode="wait">
           <motion.div
@@ -360,7 +403,7 @@ export default function App() {
                 <div className="bg-white rounded-xl shadow-sm border border-medical-blue/10 overflow-hidden">
                   <div className="p-3 bg-medical-blue text-white flex justify-between items-center">
                     <h3 className="text-xs uppercase tracking-widest font-bold">Facture</h3>
-                    <button onClick={addInvoiceItem} className="flex items-center gap-1 text-[10px] font-bold uppercase bg-white/20 px-2 py-1 rounded">
+                    <button type="button" onClick={addInvoiceItem} className="flex items-center gap-1 text-[10px] font-bold uppercase bg-white/20 px-2 py-1 rounded">
                       <Plus size={14} /> Ajouter
                     </button>
                   </div>
@@ -389,7 +432,7 @@ export default function App() {
                             className="flex-1 text-sm outline-none bg-transparent border-b border-dotted border-medical-slate/20"
                             placeholder="Prix"
                           />
-                          <button onClick={() => removeInvoiceItem(item.id)} className="text-red-300"><Trash2 size={16} /></button>
+                          <button type="button" onClick={() => removeInvoiceItem(item.id)} className="text-red-300"><Trash2 size={16} /></button>
                         </div>
                       </div>
                     ))}
@@ -404,7 +447,7 @@ export default function App() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center px-2">
                   <h3 className="text-xs uppercase tracking-widest font-bold text-medical-blue">Ordonnance</h3>
-                  <button onClick={addMedication} className="flex items-center gap-1 text-[10px] font-bold uppercase text-medical-green">
+                  <button type="button" onClick={addMedication} className="flex items-center gap-1 text-[10px] font-bold uppercase text-medical-green">
                     <Plus size={14} /> Ajouter
                   </button>
                 </div>
@@ -418,7 +461,7 @@ export default function App() {
                         placeholder="Médicament"
                         className="flex-1 font-hand text-lg outline-none border-b border-dotted border-medical-slate/20"
                       />
-                      <button onClick={() => removeMedication(med.id)} className="text-red-300"><Trash2 size={16} /></button>
+                      <button type="button" onClick={() => removeMedication(med.id)} className="text-red-300"><Trash2 size={16} /></button>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <input
@@ -440,6 +483,7 @@ export default function App() {
                       {Object.entries(med.posology).map(([key, val]) => (
                         <button
                           key={key}
+                          type="button"
                           onClick={() => updateMedication(med.id, `posology.${key}`, !val)}
                           className={`px-2 py-1 rounded text-[8px] font-bold uppercase transition-all ${
                             val ? 'bg-medical-green text-white' : 'bg-medical-slate/5 text-medical-slate/40'
@@ -456,7 +500,7 @@ export default function App() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center px-2">
                   <h3 className="text-xs uppercase tracking-widest font-bold text-medical-blue">Bulletin Médical</h3>
-                  <button onClick={addBulletinItem} className="flex items-center gap-1 text-[10px] font-bold uppercase text-medical-green">
+                  <button type="button" onClick={addBulletinItem} className="flex items-center gap-1 text-[10px] font-bold uppercase text-medical-green">
                     <Plus size={14} /> Ajouter Examen
                   </button>
                 </div>
@@ -470,11 +514,11 @@ export default function App() {
                         placeholder="Examen..."
                         className="flex-1 font-hand text-lg outline-none border-b border-dotted border-medical-slate/20"
                       />
-                      <button onClick={() => removeBulletinItem(idx)} className="text-red-300"><Trash2 size={16} /></button>
+                      <button type="button" onClick={() => removeBulletinItem(idx)} className="text-red-300"><Trash2 size={16} /></button>
                     </div>
                   ))}
                   <div className="pt-4">
-                    <label className="text-[10px] uppercase font-bold text-medical-blue block mb-1">Diagnostique</label>
+                    <label className="text-[10px] uppercase font-bold text-medical-blue block mb-1">Diagnostic</label>
                     <textarea
                       value={diagnosis}
                       onChange={(e) => setDiagnosis(e.target.value)}
@@ -497,9 +541,10 @@ export default function App() {
                 disabled={isGeneratingPdf}
                 className="flex items-center justify-center gap-2 bg-medical-blue text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-medical-blue/20 active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
               >
-                <Download size={18} /> {isGeneratingPdf ? 'Generation...' : 'PDF'}
+                    <Download size={18} /> {isGeneratingPdf ? 'Generation...' : 'PDF'}
               </button>
               <button
+                type="button"
                 onClick={resetAll}
                 className="flex items-center justify-center gap-2 bg-white text-medical-slate border border-medical-slate/10 py-3 rounded-xl font-bold text-sm active:scale-95 transition-transform"
               >
@@ -513,6 +558,7 @@ export default function App() {
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-medical-blue/5 px-4 py-3 flex justify-around items-center z-50 shadow-lg">
         <button
+          type="button"
           onClick={() => setActiveTab('invoice')}
           className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'invoice' ? 'text-medical-blue' : 'text-medical-slate/30'}`}
         >
@@ -520,6 +566,7 @@ export default function App() {
           <span className="text-[9px] font-bold uppercase">Facture</span>
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab('prescription')}
           className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'prescription' ? 'text-medical-blue' : 'text-medical-slate/30'}`}
         >
@@ -527,6 +574,7 @@ export default function App() {
           <span className="text-[9px] font-bold uppercase">Ordonnance</span>
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab('bulletin')}
           className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'bulletin' ? 'text-medical-blue' : 'text-medical-slate/30'}`}
         >

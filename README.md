@@ -1,20 +1,17 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Miss
 
-# Run and deploy your AI Studio app
+Application React/Vite de génération de documents médicaux:
 
-This contains everything you need to run your app locally.
+- factures
+- ordonnances
+- bulletins médicaux
 
-View your app in AI Studio: https://ai.studio/apps/96930e89-ac47-4ba7-85e0-b1c0987d34ee
+Chaque document peut être exporté en PDF directement depuis le navigateur.
 
-## Run Locally
+## Lancer le projet
 
-**Prerequisites:**  Node.js
+Prérequis: Node.js
 
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. Installer les dépendances avec `npm install`
+2. Démarrer le serveur de développement avec `npm run dev`
+3. Compiler pour la production avec `npm run build`

@@ -14,8 +14,8 @@ export const PatientForm: React.FC<PatientFormProps> = ({ info, onChange, showWe
         <label className="text-medical-blue font-bold text-xs uppercase whitespace-nowrap">Nom :</label>
         <input
           type="text"
-          value={info.name}
-          onChange={(e) => onChange({ ...info, name: e.target.value })}
+          value={info.lastName}
+          onChange={(e) => onChange({ ...info, lastName: e.target.value })}
           className="dotted-input flex-1 font-hand text-lg px-2"
           placeholder="..."
         />
@@ -25,10 +25,20 @@ export const PatientForm: React.FC<PatientFormProps> = ({ info, onChange, showWe
         <label className="text-medical-blue font-bold text-xs uppercase whitespace-nowrap">Prénom :</label>
         <input
           type="text"
-          value={info.age} // Reusing age field for simplicity or adding a new field if needed, but let's stick to the prompt's fields
-          onChange={(e) => onChange({ ...info, age: e.target.value })}
+          value={info.firstName}
+          onChange={(e) => onChange({ ...info, firstName: e.target.value })}
           className="dotted-input flex-1 font-hand text-lg px-2"
           placeholder="..."
+        />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <label className="text-medical-blue font-bold text-xs uppercase whitespace-nowrap">Date :</label>
+        <input
+          type="date"
+          value={info.date}
+          onChange={(e) => onChange({ ...info, date: e.target.value })}
+          className="dotted-input flex-1 text-sm px-2"
         />
       </div>
 
@@ -37,10 +47,10 @@ export const PatientForm: React.FC<PatientFormProps> = ({ info, onChange, showWe
           <label className="text-medical-blue font-bold text-xs uppercase whitespace-nowrap">Poids :</label>
           <input
             type="text"
-            value={info.weight || ''}
+            value={info.weight}
             onChange={(e) => onChange({ ...info, weight: e.target.value })}
             className="dotted-input flex-1 font-hand text-lg px-2"
-            placeholder="..."
+            placeholder="kg"
           />
         </div>
       )}

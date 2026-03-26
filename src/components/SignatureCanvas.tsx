@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 
 interface SignatureCanvasProps {
   onSave: (dataUrl: string) => void;
@@ -7,7 +7,7 @@ interface SignatureCanvasProps {
 
 export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({ onSave, onClear }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const isDrawingRef = useRef(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -35,20 +35,22 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({ onSave, onClea
   }, []);
 
   const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
-    setIsDrawing(true);
+    isDrawingRef.current = true;
     draw(e);
   };
 
   const stopDrawing = () => {
-    setIsDrawing(false);
+    isDrawingRef.current = false;
     const canvas = canvasRef.current;
-    if (canvas) {
+    const ctx = canvas?.getContext('2d');
+    if (canvas && ctx) {
+      ctx.beginPath();
       onSave(canvas.toDataURL());
     }
   };
 
   const draw = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing) return;
+    if (!isDrawingRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -57,6 +59,7 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({ onSave, onClea
     let x, y;
 
     if ('touches' in e) {
+      e.preventDefault();
       x = e.touches[0].clientX - rect.left;
       y = e.touches[0].clientY - rect.top;
     } else {
@@ -98,8 +101,9 @@ export const SignatureCanvas: React.FC<SignatureCanvasProps> = ({ onSave, onClea
           onTouchEnd={stopDrawing}
         />
         <button
+          type="button"
           onClick={clear}
-          className="absolute bottom-2 right-2 text-[10px] uppercase tracking-tighter text-medical-gold hover:text-medical-green transition-colors font-bold"
+          className="absolute bottom-2 right-2 text-[10px] uppercase tracking-tighter text-medical-blue hover:text-medical-green transition-colors font-bold"
         >
           Effacer
         </button>

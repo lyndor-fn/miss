@@ -1,5 +1,5 @@
 {
-  "name": "MédicaLux - Gestion Médicale Premium",
-  "description": "Application mobile-first de gestion de factures et ordonnances pour cabinets médicaux haut de gamme.",
+  "name": "Miss - Documents Médicaux",
+  "description": "Application mobile-first de création de factures, ordonnances et bulletins médicaux avec export PDF.",
   "requestFramePermissions": []
 }
