@@ -24,12 +24,16 @@ const createInitialPatient = (): PatientInfo => ({
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'invoice' | 'prescription' | 'bulletin'>('invoice');
-  const [patientInfo, setPatientInfo] = useState<PatientInfo>(createInitialPatient);
+  const [invoicePatientInfo, setInvoicePatientInfo] = useState<PatientInfo>(createInitialPatient);
+  const [prescriptionPatientInfo, setPrescriptionPatientInfo] = useState<PatientInfo>(createInitialPatient);
+  const [bulletinPatientInfo, setBulletinPatientInfo] = useState<PatientInfo>(createInitialPatient);
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [bulletinItems, setBulletinItems] = useState<string[]>([]);
-  const [diagnosis, setDiagnosis] = useState('');
-  const [signature, setSignature] = useState<string | null>(null);
+  const [bulletinDiagnosis, setBulletinDiagnosis] = useState('');
+  const [invoiceSignature, setInvoiceSignature] = useState<string | null>(null);
+  const [prescriptionSignature, setPrescriptionSignature] = useState<string | null>(null);
+  const [bulletinSignature, setBulletinSignature] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const pdfContentRef = useRef<HTMLDivElement>(null);
   const doctorInfo = DEFAULT_DOCTOR;
@@ -49,6 +53,75 @@ export default function App() {
     }
 
     return new Date(year, month - 1, day).toLocaleDateString('fr-FR');
+  };
+
+  const getPosologyLabel = (key: string) => {
+    if (key === 'morning') return 'le matin';
+    if (key === 'noon') return 'le midi';
+    if (key === 'evening') return 'le soir';
+    return 'la nuit';
+  };
+
+  const getDocumentTypeLabel = () => {
+    if (activeTab === 'invoice') return 'facture';
+    if (activeTab === 'prescription') return 'ordonnance';
+    return 'bulletin';
+  };
+
+  const currentPatientInfo =
+    activeTab === 'invoice'
+      ? invoicePatientInfo
+      : activeTab === 'prescription'
+        ? prescriptionPatientInfo
+        : bulletinPatientInfo;
+
+  const currentSignature =
+    activeTab === 'invoice'
+      ? invoiceSignature
+      : activeTab === 'prescription'
+        ? prescriptionSignature
+        : bulletinSignature;
+
+  const updateActivePatientInfo = (info: PatientInfo) => {
+    if (activeTab === 'invoice') {
+      setInvoicePatientInfo(info);
+      return;
+    }
+
+    if (activeTab === 'prescription') {
+      setPrescriptionPatientInfo(info);
+      return;
+    }
+
+    setBulletinPatientInfo(info);
+  };
+
+  const saveActiveSignature = (dataUrl: string) => {
+    if (activeTab === 'invoice') {
+      setInvoiceSignature(dataUrl);
+      return;
+    }
+
+    if (activeTab === 'prescription') {
+      setPrescriptionSignature(dataUrl);
+      return;
+    }
+
+    setBulletinSignature(dataUrl);
+  };
+
+  const clearActiveSignature = () => {
+    if (activeTab === 'invoice') {
+      setInvoiceSignature(null);
+      return;
+    }
+
+    if (activeTab === 'prescription') {
+      setPrescriptionSignature(null);
+      return;
+    }
+
+    setBulletinSignature(null);
   };
 
   const sanitizeFileSegment = (value: string, fallback: string) => {
@@ -125,12 +198,24 @@ export default function App() {
   };
 
   const resetAll = () => {
-    setPatientInfo(createInitialPatient());
-    setInvoiceItems([]);
-    setMedications([]);
+    if (activeTab === 'invoice') {
+      setInvoicePatientInfo(createInitialPatient());
+      setInvoiceItems([]);
+      setInvoiceSignature(null);
+      return;
+    }
+
+    if (activeTab === 'prescription') {
+      setPrescriptionPatientInfo(createInitialPatient());
+      setMedications([]);
+      setPrescriptionSignature(null);
+      return;
+    }
+
+    setBulletinPatientInfo(createInitialPatient());
     setBulletinItems([]);
-    setDiagnosis('');
-    setSignature(null);
+    setBulletinDiagnosis('');
+    setBulletinSignature(null);
   };
 
   const calculateTotal = () => {
@@ -205,9 +290,10 @@ export default function App() {
       }
 
       const fileName = [
-        activeTab,
-        sanitizeFileSegment(`${patientInfo.lastName}_${patientInfo.firstName}`, 'patient'),
-        sanitizeFileSegment(patientInfo.date || createInitialPatient().date, 'date'),
+        getDocumentTypeLabel(),
+        sanitizeFileSegment(currentPatientInfo.lastName, 'nom'),
+        sanitizeFileSegment(currentPatientInfo.firstName, 'prenom'),
+        sanitizeFileSegment(currentPatientInfo.date || createInitialPatient().date, 'date'),
       ].join('_');
 
       const pdfBlob = pdf.output('blob');
@@ -221,7 +307,8 @@ export default function App() {
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch (error) {
       console.error('PDF generation failed:', error);
-      window.alert("Le telechargement du PDF a echoue. Reessayez apres avoir rempli le document.");
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      window.alert(`Le telechargement du PDF a echoue: ${errorMessage}`);
     } finally {
       captureRoot?.remove();
       setIsGeneratingPdf(false);
@@ -232,148 +319,175 @@ export default function App() {
     <div className="min-h-screen pb-24 max-w-md mx-auto relative overflow-x-hidden">
       {/* Hidden container for PDF generation */}
       <div className="absolute left-[-9999px] top-0">
-        <div ref={pdfContentRef} id="pdf-content" className="w-[210mm] min-h-[297mm] p-12 bg-white font-sans text-medical-slate relative overflow-hidden">
-          {/* Header */}
-          <div className="flex justify-between items-start mb-12 relative">
-            <div className="flex-1 border-r-2 border-medical-blue pr-8">
-              <h1 className="text-3xl font-bold text-medical-blue uppercase tracking-tight mb-1">{doctorInfo.name}</h1>
-              <p className="text-medical-green font-bold text-xl mb-4">{doctorInfo.specialty}</p>
-              <p className="text-medical-blue font-bold text-2xl">{doctorInfo.phone}</p>
+        <div
+          ref={pdfContentRef}
+          id="pdf-content"
+          style={{
+            width: '794px',
+            minHeight: '1123px',
+            padding: '48px',
+            backgroundColor: '#FFFFFF',
+            color: '#1A1A1A',
+            fontFamily: '"DM Sans", sans-serif',
+            position: 'relative',
+            boxSizing: 'border-box',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '32px', marginBottom: '36px' }}>
+            <div style={{ flex: 1, borderRight: '2px solid #004282', paddingRight: '24px' }}>
+              <h1 style={{ margin: 0, color: '#004282', fontSize: '28px', fontWeight: 700, textTransform: 'uppercase', lineHeight: 1.1 }}>
+                {doctorInfo.name}
+              </h1>
+              <p style={{ margin: '8px 0 16px', color: '#00A651', fontSize: '20px', fontWeight: 700 }}>
+                {doctorInfo.specialty}
+              </p>
+              <p style={{ margin: 0, color: '#004282', fontSize: '24px', fontWeight: 700 }}>
+                {doctorInfo.phone}
+              </p>
             </div>
-            <div className="flex-1 pl-8 pt-2">
-              <div className="flex items-center gap-4 mb-6">
-                <span className="text-medical-blue font-bold text-xl uppercase whitespace-nowrap">DATE :</span>
-                <span className="text-medical-slate font-hand text-3xl border-b-2 border-dotted border-medical-slate/40 flex-1 pb-1">
-                  {formatPatientDate(patientInfo.date)}
+            <div style={{ flex: 1, paddingLeft: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px' }}>
+                <span style={{ color: '#004282', fontSize: '18px', fontWeight: 700 }}>DATE :</span>
+                <span style={{ flex: 1, borderBottom: '2px dotted rgba(26,26,26,0.4)', paddingBottom: '4px', fontFamily: '"Caveat", cursive', fontSize: '30px' }}>
+                  {formatPatientDate(currentPatientInfo.date)}
                 </span>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-medical-blue font-bold text-xl uppercase whitespace-nowrap">NOM :</span>
-                <span className="text-medical-slate font-hand text-3xl border-b-2 border-dotted border-medical-slate/40 flex-1 pb-1">
-                  {patientInfo.lastName}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ color: '#004282', fontSize: '18px', fontWeight: 700 }}>NOM :</span>
+                <span style={{ flex: 1, borderBottom: '2px dotted rgba(26,26,26,0.4)', paddingBottom: '4px', fontFamily: '"Caveat", cursive', fontSize: '30px' }}>
+                  {currentPatientInfo.lastName}
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-4 mb-12">
-            <span className="text-medical-blue font-bold text-xl uppercase whitespace-nowrap">PRENOM :</span>
-            <span className="text-medical-slate font-hand text-3xl border-b-2 border-dotted border-medical-slate/40 flex-1 pb-1">
-              {patientInfo.firstName}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '36px' }}>
+            <span style={{ color: '#004282', fontSize: '18px', fontWeight: 700 }}>PRENOM :</span>
+            <span style={{ flex: 1, borderBottom: '2px dotted rgba(26,26,26,0.4)', paddingBottom: '4px', fontFamily: '"Caveat", cursive', fontSize: '30px' }}>
+              {currentPatientInfo.firstName}
             </span>
           </div>
 
-          {/* Title */}
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-medical-green uppercase underline decoration-4 underline-offset-8 inline-block">
+          <div style={{ textAlign: 'center', marginBottom: '44px' }}>
+            <h2 style={{ display: 'inline-block', margin: 0, color: '#00A651', fontSize: '34px', fontWeight: 700, textTransform: 'uppercase', textDecoration: 'underline' }}>
               {activeTab === 'invoice' ? 'Facture' : activeTab === 'prescription' ? 'Ordonnance' : 'Bulletin Médical'}
             </h2>
           </div>
 
-          {/* Content */}
-          <div className="flex-1 min-h-[150mm]">
+          <div style={{ minHeight: '620px' }}>
             {activeTab === 'invoice' ? (
-              <div className="bg-medical-cyan/30 rounded-3xl overflow-hidden border-2 border-medical-blue">
-                <table className="w-full text-left border-collapse">
+              <div style={{ border: '2px solid #004282', borderRadius: '18px', overflow: 'hidden', backgroundColor: '#F5FCFD' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr className="bg-medical-blue text-white">
-                      <th className="p-6 text-xl font-bold border-r-2 border-white/20">Désignation</th>
-                      <th className="p-6 text-xl font-bold text-center border-r-2 border-white/20">Qté</th>
-                      <th className="p-6 text-xl font-bold text-center border-r-2 border-white/20">Prix</th>
-                      <th className="p-6 text-xl font-bold text-right">Montant</th>
+                    <tr style={{ backgroundColor: '#004282', color: '#FFFFFF' }}>
+                      <th style={{ padding: '18px', borderRight: '1px solid rgba(255,255,255,0.2)', fontSize: '18px', textAlign: 'left' }}>Désignation</th>
+                      <th style={{ padding: '18px', borderRight: '1px solid rgba(255,255,255,0.2)', fontSize: '18px', textAlign: 'center', width: '90px' }}>Qté</th>
+                      <th style={{ padding: '18px', borderRight: '1px solid rgba(255,255,255,0.2)', fontSize: '18px', textAlign: 'center', width: '130px' }}>Prix</th>
+                      <th style={{ padding: '18px', fontSize: '18px', textAlign: 'right', width: '160px' }}>Montant</th>
                     </tr>
                   </thead>
                   <tbody>
                     {invoiceItems.map((item, idx) => (
-                      <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-medical-cyan/10'}>
-                        <td className="p-6 text-2xl font-hand border-r-2 border-medical-blue/20">{item.description}</td>
-                        <td className="p-6 text-2xl font-hand text-center border-r-2 border-medical-blue/20">{item.quantity}</td>
-                        <td className="p-6 text-2xl font-hand text-center border-r-2 border-medical-blue/20">{item.price.toLocaleString()}</td>
-                        <td className="p-6 text-2xl font-hand text-right font-bold">{(item.quantity * item.price).toLocaleString()}</td>
+                      <tr key={item.id} style={{ backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#F0FAFC' }}>
+                        <td style={{ padding: '18px', borderRight: '1px solid rgba(0,66,130,0.2)', fontFamily: '"Caveat", cursive', fontSize: '28px' }}>{item.description}</td>
+                        <td style={{ padding: '18px', borderRight: '1px solid rgba(0,66,130,0.2)', fontFamily: '"Caveat", cursive', fontSize: '28px', textAlign: 'center' }}>{item.quantity}</td>
+                        <td style={{ padding: '18px', borderRight: '1px solid rgba(0,66,130,0.2)', fontFamily: '"Caveat", cursive', fontSize: '28px', textAlign: 'center' }}>{item.price.toLocaleString()}</td>
+                        <td style={{ padding: '18px', fontFamily: '"Caveat", cursive', fontSize: '28px', textAlign: 'right' }}>{(item.quantity * item.price).toLocaleString()}</td>
                       </tr>
                     ))}
-                    {/* Fill empty rows */}
                     {Array.from({ length: Math.max(0, 6 - invoiceItems.length) }).map((_, i) => (
-                      <tr key={i} className={(invoiceItems.length + i) % 2 === 0 ? 'bg-white' : 'bg-medical-cyan/10'}>
-                        <td className="p-8 border-r-2 border-medical-blue/20"></td>
-                        <td className="p-8 border-r-2 border-medical-blue/20"></td>
-                        <td className="p-8 border-r-2 border-medical-blue/20"></td>
-                        <td className="p-8"></td>
+                      <tr key={i} style={{ backgroundColor: (invoiceItems.length + i) % 2 === 0 ? '#FFFFFF' : '#F0FAFC' }}>
+                        <td style={{ padding: '22px', borderRight: '1px solid rgba(0,66,130,0.2)' }} />
+                        <td style={{ padding: '22px', borderRight: '1px solid rgba(0,66,130,0.2)' }} />
+                        <td style={{ padding: '22px', borderRight: '1px solid rgba(0,66,130,0.2)' }} />
+                        <td style={{ padding: '22px' }} />
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <div className="p-6 bg-white border-t-2 border-medical-blue flex justify-end items-center gap-8">
-                  <div className="bg-medical-blue text-white px-8 py-2 rounded-full text-2xl font-bold">Total</div>
-                  <div className="text-3xl font-bold">{calculateTotal().toLocaleString()}fcfa</div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '20px', padding: '20px', backgroundColor: '#FFFFFF', borderTop: '2px solid #004282' }}>
+                  <div style={{ backgroundColor: '#004282', color: '#FFFFFF', padding: '10px 24px', borderRadius: '999px', fontSize: '22px', fontWeight: 700 }}>
+                    Total
+                  </div>
+                  <div style={{ fontSize: '28px', fontWeight: 700 }}>{calculateTotal().toLocaleString()} FCFA</div>
                 </div>
               </div>
             ) : activeTab === 'prescription' ? (
-              <div className="space-y-12 text-center">
-                {patientInfo.weight && (
-                  <div className="text-right">
-                    <span className="text-2xl font-bold uppercase text-medical-blue">Poids :</span>{' '}
-                    <span className="text-3xl font-hand">{patientInfo.weight} kg</span>
+              <div>
+                {currentPatientInfo.weight && (
+                  <div style={{ textAlign: 'right', marginBottom: '28px' }}>
+                    <span style={{ color: '#004282', fontSize: '22px', fontWeight: 700 }}>Poids :</span>{' '}
+                    <span style={{ fontFamily: '"Caveat", cursive', fontSize: '30px' }}>{currentPatientInfo.weight} kg</span>
                   </div>
                 )}
-                {medications.map(med => (
-                  <div key={med.id} className="space-y-2">
-                    <div className="flex justify-center items-baseline gap-8">
-                      <h4 className="text-4xl font-hand">{med.name} {med.dosage}</h4>
-                      <span className="text-3xl font-hand">{med.duration}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+                  {medications.map((med) => (
+                    <div key={med.id} style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', alignItems: 'baseline', marginBottom: '6px' }}>
+                        <h4 style={{ margin: 0, fontFamily: '"Caveat", cursive', fontSize: '36px', fontWeight: 400 }}>
+                          {med.name} {med.dosage}
+                        </h4>
+                        <span style={{ fontFamily: '"Caveat", cursive', fontSize: '32px' }}>{med.duration}</span>
+                      </div>
+                      <div style={{ fontFamily: '"Caveat", cursive', fontSize: '28px', color: 'rgba(26,26,26,0.85)' }}>
+                        {Object.entries(med.posology)
+                          .filter(([_, val]) => val)
+                          .map(([key]) => getPosologyLabel(key))
+                          .join(', ')}
+                      </div>
                     </div>
-                    <div className="text-3xl font-hand opacity-80">
-                      {Object.entries(med.posology)
-                        .filter(([_, val]) => val)
-                        .map(([key, _]) => key === 'morning' ? 'le matin' : key === 'noon' ? 'le midi' : key === 'evening' ? 'le soir' : 'la nuit')
-                        .join(', ')}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             ) : (
-              <div className="space-y-8 text-center">
-                {bulletinItems.map((item, idx) => (
-                  <p key={idx} className="text-4xl font-hand">{item}</p>
-                ))}
-                {diagnosis && (
-                  <div className="mt-16 pt-8 border-t-2 border-medical-blue/10">
-                    <p className="text-3xl font-hand"><span className="font-bold font-sans text-2xl uppercase">Diagnostic:</span> {diagnosis}</p>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+                  {bulletinItems.map((item, idx) => (
+                    <p key={idx} style={{ margin: 0, fontFamily: '"Caveat", cursive', fontSize: '36px' }}>{item}</p>
+                  ))}
+                </div>
+                {bulletinDiagnosis && (
+                  <div style={{ marginTop: '42px', paddingTop: '24px', borderTop: '2px solid rgba(0,66,130,0.12)' }}>
+                    <p style={{ margin: 0, fontFamily: '"Caveat", cursive', fontSize: '32px' }}>
+                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '22px', fontWeight: 700, textTransform: 'uppercase' }}>Diagnostic:</span>{' '}
+                      {bulletinDiagnosis}
+                    </p>
                   </div>
                 )}
               </div>
             )}
           </div>
 
-          {/* Footer */}
-          <div className="mt-auto flex justify-between items-end">
-            <div className="w-48 h-48 opacity-10">
-              <svg viewBox="0 0 24 24" fill="currentColor" className="text-medical-green">
-                <path d="M12,2L4.5,20.29L5.21,21L12,18L18.79,21L19.5,20.29L12,2Z" />
-              </svg>
-            </div>
-            
-            <div className="text-center space-y-8">
-              <div className="border-4 border-medical-blue p-4 rounded-lg transform -rotate-2">
-                <p className="text-xl font-bold text-medical-blue">{doctorInfo.name}</p>
-                <p className="text-lg font-bold text-medical-blue">{doctorInfo.specialty}</p>
-              </div>
-              
-              <div className="relative pt-12">
-                <div className="w-64 border-t-4 border-medical-slate mx-auto"></div>
-                <p className="text-2xl font-bold uppercase tracking-widest mt-2">SIGNATURE</p>
-                {signature && <img src={signature} alt="Signature" className="absolute top-0 left-1/2 -translate-x-1/2 h-32 object-contain mix-blend-multiply" />}
+          <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <div style={{ width: '120px', height: '120px', borderRadius: '999px', border: '3px solid rgba(0,166,81,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: '70px', height: '70px', borderRadius: '999px', backgroundColor: '#004282', color: '#00A651', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '38px', fontWeight: 700 }}>
+                +
               </div>
             </div>
-          </div>
 
-          {/* Logo Bottom */}
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
-            <div className="w-24 h-24 bg-black rounded-full flex items-center justify-center">
-              <div className="w-16 h-16 text-medical-green">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19,3H5C3.89,3 3,3.9 3,5V19C3,20.1 3.89,21 5,21H19C20.1,21 21,20.1 21,19V5C21,3.9 20.1,3 19,3M19,19H5V5H19V19M11,17H13V13H17V11H13V7H11V11H7V13H11V17Z" />
-                </svg>
+            <div style={{ width: '280px', textAlign: 'center' }}>
+              <div style={{ border: '3px solid #004282', borderRadius: '8px', padding: '16px', marginBottom: '28px' }}>
+                <p style={{ margin: 0, color: '#004282', fontSize: '20px', fontWeight: 700 }}>{doctorInfo.name}</p>
+                <p style={{ margin: '6px 0 0', color: '#004282', fontSize: '18px', fontWeight: 700 }}>{doctorInfo.specialty}</p>
+              </div>
+
+              <div style={{ position: 'relative', paddingTop: '44px' }}>
+                <div style={{ borderTop: '3px solid #1A1A1A', width: '220px', margin: '0 auto' }} />
+                <p style={{ margin: '8px 0 0', fontSize: '20px', fontWeight: 700, letterSpacing: '0.08em' }}>SIGNATURE</p>
+                {currentSignature && (
+                  <img
+                    src={currentSignature}
+                    alt="Signature"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      height: '110px',
+                      objectFit: 'contain',
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -382,7 +496,7 @@ export default function App() {
 
       {/* Main UI */}
       <div className="p-4 pt-8">
-        <DoctorHeader info={doctorInfo} date={patientInfo.date} />
+        <DoctorHeader info={doctorInfo} date={currentPatientInfo.date} />
 
         <AnimatePresence mode="wait">
           <motion.div
@@ -393,8 +507,8 @@ export default function App() {
             transition={{ duration: 0.2 }}
           >
             <PatientForm 
-              info={patientInfo} 
-              onChange={setPatientInfo} 
+              info={currentPatientInfo} 
+              onChange={updateActivePatientInfo} 
               showWeight={activeTab === 'prescription'} 
             />
 
@@ -520,8 +634,8 @@ export default function App() {
                   <div className="pt-4">
                     <label className="text-[10px] uppercase font-bold text-medical-blue block mb-1">Diagnostic</label>
                     <textarea
-                      value={diagnosis}
-                      onChange={(e) => setDiagnosis(e.target.value)}
+                      value={bulletinDiagnosis}
+                      onChange={(e) => setBulletinDiagnosis(e.target.value)}
                       className="w-full text-sm font-hand text-lg bg-medical-bg/50 rounded-lg p-2 outline-none focus:ring-1 focus:ring-medical-blue/20 min-h-[80px]"
                       placeholder="Visite médicale annuelle..."
                     />
@@ -531,7 +645,7 @@ export default function App() {
             )}
 
             <div className="mt-6">
-              <SignatureCanvas onSave={setSignature} onClear={() => setSignature(null)} />
+              <SignatureCanvas onSave={saveActiveSignature} onClear={clearActiveSignature} />
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-6">
